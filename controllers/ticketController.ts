@@ -218,14 +218,13 @@ export function getScanPage(req: Request, res: Response): void {
         });
   }
 
-  function showResult(status, title, msg, autoReset) {
+  function showResult(status, title, msg) {
     var icons  = {granted:'&#x2705;', denied:'&#x274C;', error:'&#x26A0;&#xFE0F;'};
     var colors = {granted:'#4ade80',  denied:'#f87171',  error:'#fbbf24'};
     document.getElementById('content').innerHTML =
       '<div class="icon">'+(icons[status]||'&#x26A0;&#xFE0F;')+'</div>'+
       '<div class="title" style="color:'+(colors[status]||'#fbbf24')+'">'+title+'</div>'+
       '<div class="msg">'+(msg||'')+'</div>';
-    if (autoReset) setTimeout(function(){ renderAdmit(0); }, 2500);
   }
 
   function renderAdmit(knownCount) {
@@ -249,16 +248,18 @@ export function getScanPage(req: Request, res: Response): void {
       .then(function(r){ return r.json(); })
       .then(function(d){
         if (d.granted){
-          showResult('granted','ADMITTED \u2705', d.count+' / '+CAPACITY+' guests entered', true);
+          showResult('granted','ADMITTED \u2705',
+            d.count+' / '+CAPACITY+' guests entered<br><br>'+
+            '<span style="font-size:.85rem;color:rgba(255,255,255,.6)">Scan next guest\\'s QR code to continue</span>');
         } else if (d.reason==='full'){
-          showResult('denied','VENUE FULL','All '+CAPACITY+' spots have been filled', false);
+          showResult('denied','VENUE FULL','All '+CAPACITY+' spots have been filled');
         } else {
-          showResult('error','Error', d.error||'Please try again', false);
+          showResult('error','Error', d.error||'Please try again');
           setTimeout(function(){ renderAdmit(count); }, 2000);
         }
       })
       .catch(function(){
-        showResult('error','Connection Error','Please try again or see a staff member.', false);
+        showResult('error','Connection Error','Please try again or see a staff member.');
         setTimeout(function(){ renderAdmit(count); }, 2000);
       });
     });
