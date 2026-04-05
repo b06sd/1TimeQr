@@ -1,26 +1,49 @@
 import { Request, Response } from "express";
 import { tryAdmit, countAdmitted, listEntries } from "../models/fileStore";
 
-const WEDDING_NAME = (
-  process.env.WEDDING_NAME || "Aisha & Francis Wedding"
-).trim();
-const WEDDING_DATE = (process.env.WEDDING_DATE || "").trim();
+// Strip surrounding quotes Railway sometimes adds, then trim whitespace.
+function cleanEnv(val: string | undefined, fallback = ""): string {
+  return (val || fallback)
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .trim();
+}
+
+const WEDDING_NAME = cleanEnv(
+  process.env.WEDDING_NAME,
+  "Aisha & Francis Wedding",
+);
+const WEDDING_DATE = cleanEnv(process.env.WEDDING_DATE);
 const CAPACITY = parseInt(
-  (process.env.CAPACITY || "300").trim().replace(/[^0-9]/g, "") || "300",
+  cleanEnv(process.env.CAPACITY, "300").replace(/[^0-9]/g, "") || "300",
   10,
 );
-// ISO date string e.g. "2026-04-20". Empty = no restriction.
-const EVENT_DATE = (process.env.EVENT_DATE || "").trim();
-// PIN the security guard must enter before the admit button is shown.
-const GUARD_PIN = (process.env.GUARD_PIN || "").trim();
-const BASE_URL = (process.env.BASE_URL || "").trim();
-// Secret token embedded in the QR code URL — validates the QR is the real one.
-const WEDDING_TOKEN = (process.env.WEDDING_TOKEN || "").trim();
 
-/** Returns true only if EVENT_DATE is set and now >= EVENT_DATE. Fails closed if unset. */
+// ISO date string e.g. "2026-04-25T12:00:00Z". Empty = locked (fail closed).
+const EVENT_DATE = cleanEnv(process.env.EVENT_DATE);
+// PIN the security guard must enter before the admit button is shown.
+const GUARD_PIN = cleanEnv(process.env.GUARD_PIN);
+const BASE_URL = cleanEnv(process.env.BASE_URL);
+// Secret token embedded in the QR code URL — validates the QR is the real one.
+const WEDDING_TOKEN = cleanEnv(process.env.WEDDING_TOKEN);
+
+// Startup diagnostic — visible in Railway logs.
+console.log(
+  "[config] CAPACITY=%d EVENT_DATE=%s isEventDay=%s",
+  CAPACITY,
+  EVENT_DATE || "(unset)",
+  isEventDay(),
+);
+
+/** Returns true only when EVENT_DATE is set, valid, and now >= that date. */
 function isEventDay(): boolean {
   if (!EVENT_DATE) return false;
-  return Date.now() >= new Date(EVENT_DATE).getTime();
+  const t = new Date(EVENT_DATE).getTime();
+  if (isNaN(t)) {
+    console.error("[config] EVENT_DATE is invalid:", EVENT_DATE);
+    return false;
+  }
+  return Date.now() >= t;
 }
 
 // ─────────────────────────────────────────────────────────────
