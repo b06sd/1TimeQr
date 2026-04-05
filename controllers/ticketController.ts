@@ -195,53 +195,50 @@ export function getScanPage(req: Request, res: Response): void {
       '<div class="icon">'+(icons[status]||'&#x26A0;&#xFE0F;')+'</div>'+
       '<div class="title" style="color:'+(colors[status]||'#fbbf24')+'">'+title+'</div>'+
       '<div class="msg">'+(msg||'')+'</div>';
-    if (autoReset) setTimeout(renderAdmit, 2500);
+    if (autoReset) setTimeout(function(){ renderAdmit(0); }, 2500);
   }
 
-  function renderAdmit() {
+  function renderAdmit(knownCount) {
+    var count = (typeof knownCount === 'number') ? knownCount : 0;
+    var nonce = genNonce();
+    var remaining = CAPACITY - count;
+    document.getElementById('content').innerHTML =
+      '<div class="count-badge">'+count+
+        '<span class="of"> / '+CAPACITY+'</span></div>'+
+      '<div class="count-label">admitted</div>'+
+      '<button id="admit-btn" class="admit-btn">TAP TO ADMIT</button>'+
+      '<div class="remaining">'+remaining+' spot'+(remaining!==1?'s':'')+' remaining</div>';
+    document.getElementById('admit-btn').addEventListener('click', function(){
+      var btn=this; btn.disabled=true; btn.textContent='Processing\u2026';
+      fetch('/api/scan/verify',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({scanNonce:nonce})
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.granted){
+          showResult('granted','ADMITTED \u2705', d.count+' / '+CAPACITY+' guests entered', true);
+        } else if (d.reason==='full'){
+          showResult('denied','VENUE FULL','All '+CAPACITY+' spots have been filled', false);
+        } else {
+          showResult('error','Error', d.error||'Please try again', false);
+          setTimeout(function(){ renderAdmit(count); }, 2000);
+        }
+      })
+      .catch(function(){
+        showResult('error','Connection Error','Please try again or see a staff member.', false);
+        setTimeout(function(){ renderAdmit(count); }, 2000);
+      });
+    });
+    // Refresh count silently in background
     fetch('/api/admin/stats')
       .then(function(r){ return r.json(); })
       .then(function(data){
-        var count=(data.data&&typeof data.data.totalAdmitted==='number')?data.data.totalAdmitted:0;
-        if (count>=CAPACITY){
-          showResult('denied','VENUE FULL','All '+CAPACITY+' spots have been filled', false);
-          return;
-        }
-        var nonce = genNonce();
-        var remaining = CAPACITY - count;
-        document.getElementById('content').innerHTML =
-          '<div class="count-badge">'+count+
-            '<span class="of"> / '+CAPACITY+'</span></div>'+
-          '<div class="count-label">admitted</div>'+
-          '<button id="admit-btn" class="admit-btn">TAP TO ADMIT</button>'+
-          '<div class="remaining">'+remaining+' spot'+(remaining!==1?'s':'')+' remaining</div>';
-        document.getElementById('admit-btn').addEventListener('click', function(){
-          var btn=this; btn.disabled=true; btn.textContent='Processing\u2026';
-          fetch('/api/scan/verify',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({scanNonce:nonce})
-          })
-          .then(function(r){ return r.json(); })
-          .then(function(d){
-            if (d.granted){
-              showResult('granted','ADMITTED \u2705', d.count+' / '+CAPACITY+' guests entered', true);
-            } else if (d.reason==='full'){
-              showResult('denied','VENUE FULL','All '+CAPACITY+' spots have been filled', false);
-            } else {
-              showResult('error','Error', d.error||'Please try again', false);
-              setTimeout(renderAdmit, 2000);
-            }
-          })
-          .catch(function(){
-            showResult('error','Connection Error','Please try again or see a staff member.', false);
-            setTimeout(renderAdmit, 2000);
-          });
-        });
+        var c=(data.data&&typeof data.data.totalAdmitted==='number')?data.data.totalAdmitted:count;
+        if (c !== count) renderAdmit(c);
       })
-      .catch(function(){
-        showResult('error','Could Not Load','Check connection and try again.', false);
-      });
+      .catch(function(){});
   }
 
   // ── Countdown (before event date) ──────────────────────────
@@ -295,7 +292,7 @@ export function getScanPage(req: Request, res: Response): void {
       var entered=document.getElementById('pin-input').value;
       if (entered===GUARD_PIN){
         sessionStorage.setItem(SESSION_KEY,'1');
-        renderAdmit();
+        renderAdmit(0);
       } else {
         document.getElementById('pin-error').textContent='Incorrect PIN. Try again.';
         document.getElementById('pin-input').value='';
@@ -311,7 +308,7 @@ export function getScanPage(req: Request, res: Response): void {
   }
 
   // ── Admit (PIN already verified or no PIN set) ──────────────
-  renderAdmit();
+  renderAdmit(0);
 })();
 </script>
 </body>
