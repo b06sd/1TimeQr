@@ -206,6 +206,7 @@ export function getScanPage(req: Request, res: Response): void {
   var EVENT_DATE_STR = '${escHtml(EVENT_DATE)}';
   var GUARD_PIN      = '${escHtml(GUARD_PIN)}';
   var SESSION_KEY    = '1tqr_guard_auth';
+  var _admitGen      = 0; // increments on each renderAdmit call to cancel stale fetches
 
   function genNonce() {
     return (window.crypto && window.crypto.randomUUID)
@@ -230,6 +231,7 @@ export function getScanPage(req: Request, res: Response): void {
     var count = (typeof knownCount === 'number') ? knownCount : 0;
     var nonce = genNonce();
     var remaining = CAPACITY - count;
+    var myGen = ++_admitGen; // snapshot — stale fetch callbacks will see myGen !== _admitGen
     document.getElementById('content').innerHTML =
       '<div class="count-badge">'+count+
         '<span class="of"> / '+CAPACITY+'</span></div>'+
@@ -259,19 +261,62 @@ export function getScanPage(req: Request, res: Response): void {
         setTimeout(function(){ renderAdmit(count); }, 2000);
       });
     });
-    // Refresh count silently in background
+    // One-shot background count sync — dropped if a newer render has already run
     fetch('/api/admin/stats')
       .then(function(r){ return r.json(); })
       .then(function(data){
+        if (myGen !== _admitGen) return; // stale — a newer renderAdmit already took over
         var c=(data.data&&typeof data.data.totalAdmitted==='number')?data.data.totalAdmitted:count;
         if (c !== count) renderAdmit(c);
       })
       .catch(function(){});
   }
 
+  // ── PIN gate + admit — called both on initial open and when countdown ends ──
+  function startAdmitUI() {
+    if (GUARD_PIN && sessionStorage.getItem(SESSION_KEY)!=='1') {
+      document.getElementById('content').innerHTML=
+        '<div class="title" style="color:#fff;margin-bottom:.75rem">&#x1F512; Guard Access</div>'+
+        '<div class="msg" style="margin-bottom:1rem">Enter your PIN to continue</div>'+
+        '<div class="pin-wrap">'+
+          '<input id="pin-input" class="pin-input" type="password" inputmode="numeric" maxlength="10" placeholder="PIN" autocomplete="off" />'+
+          '<div id="pin-error" class="pin-error"></div>'+
+        '</div>'+
+        '<button id="pin-btn" class="admit-btn">UNLOCK</button>';
+      function attemptPin(){
+        var entered=document.getElementById('pin-input').value;
+        if (entered===GUARD_PIN){
+          sessionStorage.setItem(SESSION_KEY,'1');
+          renderAdmit(0);
+        } else {
+          document.getElementById('pin-error').textContent='Incorrect PIN. Try again.';
+          document.getElementById('pin-input').value='';
+          document.getElementById('pin-input').focus();
+        }
+      }
+      document.getElementById('pin-btn').addEventListener('click',attemptPin);
+      document.getElementById('pin-input').addEventListener('keydown',function(e){
+        if(e.key==='Enter')attemptPin();
+      });
+      document.getElementById('pin-input').focus();
+    } else {
+      renderAdmit(0);
+    }
+  }
+
   // ── Countdown (before event date) ──────────────────────────
   if (!EVENT_OPEN) {
     var targetDate = EVENT_DATE_STR ? new Date(EVENT_DATE_STR) : null;
+    var targetMs   = targetDate ? targetDate.getTime() : NaN;
+    // If no valid date is configured, show a static locked message — never reload
+    if (!targetDate || isNaN(targetMs)) {
+      document.getElementById('content').innerHTML=
+        '<div class="icon">&#x1F512;</div>'+
+        '<div class="title" style="color:#94a3b8">Not Yet Open</div>'+
+        '<div class="msg">Check back on the day of the event.</div>';
+      return;
+    }
+    var countdownTimer;
     function pad(n){ return String(n).padStart(2,'0'); }
     function buildGrid(d,h,m,s){
       return '<div class="countdown-grid">'+
@@ -285,9 +330,13 @@ export function getScanPage(req: Request, res: Response): void {
       '</div>';
     }
     function tick(){
-      var now=Date.now();
-      var diff=targetDate?Math.max(0,targetDate.getTime()-now):0;
-      if (diff<=0){location.reload();return;}
+      var now  = Date.now();
+      var diff = Math.max(0, targetMs - now);
+      if (diff <= 0) {
+        clearInterval(countdownTimer); // stop the ticker
+        startAdmitUI();                // transition directly — no page reload
+        return;
+      }
       var td=Math.floor(diff/86400000);
       var th=Math.floor((diff%86400000)/3600000);
       var tm=Math.floor((diff%3600000)/60000);
@@ -302,41 +351,12 @@ export function getScanPage(req: Request, res: Response): void {
         '</div>'+
         '<button class="admit-btn" disabled>NOT YET OPEN</button>';
     }
-    tick(); setInterval(tick,1000);
+    tick(); countdownTimer = setInterval(tick, 1000);
     return;
   }
 
-  // ── PIN gate ────────────────────────────────────────────────
-  if (GUARD_PIN && sessionStorage.getItem(SESSION_KEY)!=='1') {
-    document.getElementById('content').innerHTML=
-      '<div class="title" style="color:#fff;margin-bottom:.75rem">&#x1F512; Guard Access</div>'+
-      '<div class="msg" style="margin-bottom:1rem">Enter your PIN to continue</div>'+
-      '<div class="pin-wrap">'+
-        '<input id="pin-input" class="pin-input" type="password" inputmode="numeric" maxlength="10" placeholder="PIN" autocomplete="off" />'+
-        '<div id="pin-error" class="pin-error"></div>'+
-      '</div>'+
-      '<button id="pin-btn" class="admit-btn">UNLOCK</button>';
-    function attemptPin(){
-      var entered=document.getElementById('pin-input').value;
-      if (entered===GUARD_PIN){
-        sessionStorage.setItem(SESSION_KEY,'1');
-        renderAdmit(0);
-      } else {
-        document.getElementById('pin-error').textContent='Incorrect PIN. Try again.';
-        document.getElementById('pin-input').value='';
-        document.getElementById('pin-input').focus();
-      }
-    }
-    document.getElementById('pin-btn').addEventListener('click',attemptPin);
-    document.getElementById('pin-input').addEventListener('keydown',function(e){
-      if(e.key==='Enter')attemptPin();
-    });
-    document.getElementById('pin-input').focus();
-    return;
-  }
-
-  // ── Admit (PIN already verified or no PIN set) ──────────────
-  renderAdmit(0);
+  // ── Event is open — straight to PIN / admit ─────────────────
+  startAdmitUI();
 })();
 </script>
 </body>
