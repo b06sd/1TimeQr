@@ -5,7 +5,9 @@ import { tryAdmit, countAdmitted, listEntries } from "../models/fileStore";
 
 // Presence of this file means the admin has run `npm run generate`
 // and the system is officially open for scanning.
-const QR_PATH = path.join(__dirname, "..", "generated", "wedding-qr.png");
+// Use process.cwd() so the path resolves correctly both under ts-node
+// (cwd = src/backend) and compiled JS on Railway (cwd = project root).
+const QR_PATH = path.join(process.cwd(), "generated", "wedding-qr.png");
 function isSystemActive(): boolean {
   return fs.existsSync(QR_PATH);
 }
