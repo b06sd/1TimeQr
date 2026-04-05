@@ -345,7 +345,7 @@ export function getScanPage(req: Request, res: Response): void {
         '<div class="title" style="color:#f8fafc;margin-bottom:.25rem">Not Yet Open</div>'+
         '<div class="msg" style="margin-bottom:1.25rem">Entry opens on '+
           (WEDDING_DATE_LABEL || document.title.replace(' \u2014 Entry',''))+
-        '</div>'+'
+        '</div>'+
         '<div class="countdown-wrap">'+
           buildGrid(td,th,tm,ts)+
           '<div class="cd-until">remaining</div>'+
