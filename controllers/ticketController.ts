@@ -1,16 +1,5 @@
-import fs from "fs";
-import path from "path";
 import { Request, Response } from "express";
 import { tryAdmit, countAdmitted, listEntries } from "../models/fileStore";
-
-// Presence of this file means the admin has run `npm run generate`
-// and the system is officially open for scanning.
-// Use process.cwd() so the path resolves correctly both under ts-node
-// (cwd = src/backend) and compiled JS on Railway (cwd = project root).
-const QR_PATH = path.join(process.cwd(), "generated", "wedding-qr.png");
-function isSystemActive(): boolean {
-  return fs.existsSync(QR_PATH);
-}
 
 const WEDDING_NAME = (process.env.WEDDING_NAME || "The Wedding").trim();
 const WEDDING_DATE = (process.env.WEDDING_DATE || "").trim();
@@ -31,44 +20,6 @@ function isEventDay(): boolean {
 // localStorage, then POSTs it to /api/scan/verify.
 // ─────────────────────────────────────────────────────────────
 export function getScanPage(_req: Request, res: Response): void {
-  if (!isSystemActive()) {
-    const footer =
-      escHtml(WEDDING_NAME) +
-      (WEDDING_DATE ? ` &middot; ${escHtml(WEDDING_DATE)}` : "");
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.status(503).send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${escHtml(WEDDING_NAME)}</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;
-         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-         background:#fafafa;padding:1.5rem;}
-    .card{background:#fff;border-radius:1.5rem;
-          box-shadow:0 4px 32px rgba(0,0,0,.1);
-          padding:2.5rem 2rem;max-width:380px;width:100%;text-align:center;}
-    .icon{font-size:3.5rem;margin-bottom:1rem}
-    .title{font-size:1.75rem;font-weight:700;margin-bottom:.5rem;color:#d97706}
-    .msg{color:#4b5563;line-height:1.5}
-    .footer{margin-top:2rem;font-size:.75rem;color:#9ca3af;
-            border-top:1px solid #f3f4f6;padding-top:1rem}
-  </style>
-</head>
-<body style="background:#fffbeb">
-<div class="card">
-  <div class="icon">&#x23F3;</div>
-  <div class="title">Not Yet Active</div>
-  <div class="msg">The entry system has not been activated yet. Please check back soon.</div>
-  <div class="footer">${footer}</div>
-</div>
-</body>
-</html>`);
-    return;
-  }
-
   const footer =
     escHtml(WEDDING_NAME) +
     (WEDDING_DATE ? ` &middot; ${escHtml(WEDDING_DATE)}` : "");
@@ -300,11 +251,6 @@ export async function verifyScan(req: Request, res: Response): Promise<void> {
     "";
   const ua = req.headers["user-agent"] || "";
   const { scanNonce } = req.body;
-
-  if (!isSystemActive()) {
-    res.status(503).json({ granted: false, error: "System not active" });
-    return;
-  }
 
   if (!isEventDay()) {
     res.status(403).json({
