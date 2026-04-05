@@ -8,7 +8,7 @@ const CAPACITY = parseInt(process.env.CAPACITY || "300", 10);
 const EVENT_DATE = (process.env.EVENT_DATE || "").trim();
 // PIN the security guard must enter before the admit button is shown.
 const GUARD_PIN = (process.env.GUARD_PIN || "").trim();
-const BASE_URL  = (process.env.BASE_URL  || "").trim();
+const BASE_URL = (process.env.BASE_URL || "").trim();
 
 /** Returns true if now >= EVENT_DATE (or no EVENT_DATE is set). */
 function isEventDay(): boolean {
@@ -140,6 +140,12 @@ export function getScanPage(_req: Request, res: Response): void {
   var EVENT_DATE_STR= '${escHtml(EVENT_DATE)}';
   var GUARD_PIN     = '${escHtml(GUARD_PIN)}';
   var SCAN_URL      = '${escHtml(BASE_URL)}/scan';
+  // Accept the QR if it exactly matches SCAN_URL, or if BASE_URL isn't
+  // configured yet, fall back to matching any URL that ends with '/scan'.
+  function isWeddingQR(data) {
+    if (SCAN_URL && SCAN_URL !== '/scan') return data === SCAN_URL;
+    return /\/scan$/.test(data);
+  }
   var SESSION_KEY   = '1tqr_guard_auth';
   var currentCount  = 0;
   var scanningStream= null;
@@ -243,7 +249,7 @@ export function getScanPage(_req: Request, res: Response): void {
             try {
               var img  = ctx.getImageData(0,0,canvas.width,canvas.height);
               var code = jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
-              if (code && code.data===SCAN_URL) {
+              if (code && isWeddingQR(code.data)) {
                 active=false; stopCamera();
                 var frame=document.getElementById('scan-frame');
                 if (frame) frame.style.borderColor='#4ade80';
