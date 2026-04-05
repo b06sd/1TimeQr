@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import crypto from "crypto";
 import { tryAdmit, countAdmitted, listEntries } from "../models/fileStore";
 
 // Strip surrounding quotes Railway sometimes adds, then trim whitespace.
@@ -47,46 +48,57 @@ function isEventDay(): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GET /scan
-// Serves the guest-facing HTML page opened when they scan the QR.
-// The page JS generates/retrieves a persistent deviceId from
-// localStorage, then POSTs it to /api/scan/verify.
+// One-time admit codes — each QR scan creates one, burned on page load
+// Map<code, 'fresh'> — 'fresh' means page not yet served.
+// Once the admit page is served, the code is deleted.
+// Auto-expire after 5 minutes to prevent memory leaks.
+// ─────────────────────────────────────────────────────────────
+const admitCodes = new Map<string, { status: "fresh"; expires: number }>();
+const ADMIT_CODE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function createAdmitCode(): string {
+  const code = crypto.randomUUID();
+  admitCodes.set(code, { status: "fresh", expires: Date.now() + ADMIT_CODE_TTL });
+  // Lazy cleanup: remove expired codes
+  for (const [k, v] of admitCodes) {
+    if (v.expires < Date.now()) admitCodes.delete(k);
+  }
+  return code;
+}
+
+function consumeAdmitCode(code: string): boolean {
+  const entry = admitCodes.get(code);
+  if (!entry) return false;
+  if (entry.expires < Date.now()) { admitCodes.delete(code); return false; }
+  admitCodes.delete(code); // burn it — one use only
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────────
+// GET /scan?token=WEDDING_TOKEN
+// Validates the QR token, creates a one-time admit code,
+// and redirects to /admit?code=CODE.
 // ─────────────────────────────────────────────────────────────
 export function getScanPage(req: Request, res: Response): void {
-  // Validate the token embedded in the QR code URL.
-  // If missing or wrong, this is not a genuine QR scan — reject it.
   const token = ((req.query.token as string) || "").trim();
   if (WEDDING_TOKEN && token !== WEDDING_TOKEN) {
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.status(403).send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Invalid QR</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;
-         background:url('/img_bg_aisha_francis.png') center/cover no-repeat fixed;
-         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:1.5rem;}
-    body::before{content:'';position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:0}
-    .card{position:relative;z-index:1;background:rgba(255,255,255,.12);
-          backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.2);
-          border-radius:1.5rem;padding:2.5rem 2rem;max-width:360px;
-          width:100%;text-align:center;color:#fff;}
-    .icon{font-size:3rem;margin-bottom:.75rem}
-    .title{font-size:1.6rem;font-weight:800;color:#f87171;margin-bottom:.5rem}
-    .msg{color:rgba(255,255,255,.8);line-height:1.5}
-  </style>
-</head>
-<body>
-<div class="card">
-  <div class="icon">&#x274C;</div>
-  <div class="title">Invalid QR Code</div>
-  <div class="msg">Please scan the official wedding QR code to enter.</div>
-</div>
-</body>
-</html>`);
+    sendErrorPage(res, 403, "Invalid QR Code", "Please scan the official wedding QR code to enter.");
+    return;
+  }
+  const code = createAdmitCode();
+  res.redirect(`/admit?code=${code}`);
+}
+
+// ─────────────────────────────────────────────────────────────
+// GET /admit?code=ONE_TIME_CODE
+// Burns the code on first load and serves the admit page.
+// Refresh = code already burned = error.
+// ─────────────────────────────────────────────────────────────
+export function getAdmitPage(req: Request, res: Response): void {
+  const code = ((req.query.code as string) || "").trim();
+  if (!code || !consumeAdmitCode(code)) {
+    sendErrorPage(res, 403, "Session Expired",
+      "This page can only be loaded once per QR scan.<br>Please scan the QR code again to admit the next guest.");
     return;
   }
 
@@ -457,6 +469,39 @@ export function listScans(req: Request, res: Response): void {
     data: records,
     pagination: { page, limit, total, pages: Math.ceil(total / limit) },
   });
+}
+
+function sendErrorPage(res: Response, status: number, title: string, msg: string): void {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.status(status).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>${title}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;
+         background:url('/img_bg_aisha_francis.png') center/cover no-repeat fixed;
+         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:1.5rem}
+    body::before{content:'';position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:0}
+    .card{position:relative;z-index:1;background:rgba(255,255,255,.12);
+          backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.2);
+          border-radius:1.5rem;padding:2.5rem 2rem;max-width:360px;
+          width:100%;text-align:center;color:#fff}
+    .icon{font-size:3rem;margin-bottom:.75rem}
+    .title{font-size:1.6rem;font-weight:800;color:#f87171;margin-bottom:.5rem}
+    .msg{color:rgba(255,255,255,.8);line-height:1.5}
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">&#x274C;</div>
+  <div class="title">${title}</div>
+  <div class="msg">${msg}</div>
+</div>
+</body>
+</html>`);
 }
 
 function escHtml(str: string): string {

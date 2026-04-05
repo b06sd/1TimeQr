@@ -12,7 +12,7 @@ import rateLimit from "express-rate-limit";
 
 import { connectDB } from "./models/database";
 
-import scanRoutes, { getScanPage } from "./routes/ticketRoutes";
+import scanRoutes, { getScanPage, getAdmitPage } from "./routes/ticketRoutes";
 
 const app = express();
 
@@ -52,6 +52,8 @@ const verifyLimiter = rateLimit({
 });
 
 app.get("/scan", getScanPage);
+
+app.get("/admit", getAdmitPage);
 
 app.use("/api/scan", verifyLimiter, scanRoutes);
 
