@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+
+# QR output — regenerate on server after deploy
+generated/*.png
+generated/*.html
+
+# Scan data — never commit real event data
+data/*.json
