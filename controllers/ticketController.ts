@@ -203,7 +203,8 @@ export function getScanPage(req: Request, res: Response): void {
 (function () {
   var CAPACITY       = ${CAPACITY};
   var EVENT_OPEN     = ${isEventDay()};
-  var EVENT_DATE_STR = '${escHtml(EVENT_DATE)}';
+  var TARGET_MS      = ${EVENT_DATE ? new Date(EVENT_DATE).getTime() : 0};
+  var WEDDING_DATE_LABEL = '${escHtml(WEDDING_DATE)}';
   var GUARD_PIN      = '${escHtml(GUARD_PIN)}';
   var SESSION_KEY    = '1tqr_guard_auth';
   var _admitGen      = 0; // increments on each renderAdmit call to cancel stale fetches
@@ -306,10 +307,8 @@ export function getScanPage(req: Request, res: Response): void {
 
   // ── Countdown (before event date) ──────────────────────────
   if (!EVENT_OPEN) {
-    var targetDate = EVENT_DATE_STR ? new Date(EVENT_DATE_STR) : null;
-    var targetMs   = targetDate ? targetDate.getTime() : NaN;
-    // If no valid date is configured, show a static locked message — never reload
-    if (!targetDate || isNaN(targetMs)) {
+    // TARGET_MS is 0 when EVENT_DATE is not configured on the server
+    if (!TARGET_MS) {
       document.getElementById('content').innerHTML=
         '<div class="icon">&#x1F512;</div>'+
         '<div class="title" style="color:#94a3b8">Not Yet Open</div>'+
@@ -331,7 +330,7 @@ export function getScanPage(req: Request, res: Response): void {
     }
     function tick(){
       var now  = Date.now();
-      var diff = Math.max(0, targetMs - now);
+      var diff = Math.max(0, TARGET_MS - now);
       if (diff <= 0) {
         clearInterval(countdownTimer); // stop the ticker
         startAdmitUI();                // transition directly — no page reload
@@ -345,8 +344,8 @@ export function getScanPage(req: Request, res: Response): void {
         '<div class="icon">&#x1F512;</div>'+
         '<div class="title" style="color:#f8fafc;margin-bottom:.25rem">Not Yet Open</div>'+
         '<div class="msg" style="margin-bottom:1.25rem">Entry opens on '+
-          (document.title.replace(' \u2014 Entry',''))+
-        '</div>'+
+          (WEDDING_DATE_LABEL || document.title.replace(' \u2014 Entry',''))+
+        '</div>'+'
         '<div class="countdown-wrap">'+
           buildGrid(td,th,tm,ts)+
           '<div class="cd-until">remaining</div>'+
