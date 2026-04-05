@@ -342,14 +342,15 @@ export function getScanPage(req: Request, res: Response): void {
       var tm=Math.floor((diff%3600000)/60000);
       var ts=Math.floor((diff%60000)/1000);
       document.getElementById('content').innerHTML=
-        '<div style="color:#38bdf8;font-size:1rem;font-weight:700;letter-spacing:.08em;'+
-             'text-transform:uppercase;margin-bottom:.9rem">'+
-             '&#x1F48D; '+(document.title.replace(' \u2014 Entry',''))+'</div>'+
+        '<div class="icon">&#x1F512;</div>'+
+        '<div class="title" style="color:#f8fafc;margin-bottom:.25rem">Not Yet Open</div>'+
+        '<div class="msg" style="margin-bottom:1.25rem">Entry opens on '+
+          (document.title.replace(' \u2014 Entry',''))+
+        '</div>'+
         '<div class="countdown-wrap">'+
           buildGrid(td,th,tm,ts)+
-          '<div class="cd-until">until the event</div>'+
-        '</div>'+
-        '<button class="admit-btn" disabled>NOT YET OPEN</button>';
+          '<div class="cd-until">remaining</div>'+
+        '</div>';
     }
     tick(); countdownTimer = setInterval(tick, 1000);
     return;
