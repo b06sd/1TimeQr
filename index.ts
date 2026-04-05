@@ -26,7 +26,7 @@ app.use(
 
         styleSrc: ["'self'", "'unsafe-inline'"],
 
-        scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
       },
     },
   }),

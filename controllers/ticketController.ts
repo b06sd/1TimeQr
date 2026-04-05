@@ -9,6 +9,8 @@ const EVENT_DATE = (process.env.EVENT_DATE || "").trim();
 // PIN the security guard must enter before the admit button is shown.
 const GUARD_PIN = (process.env.GUARD_PIN || "").trim();
 const BASE_URL = (process.env.BASE_URL || "").trim();
+// Secret token embedded in the QR code URL — validates the QR is the real one.
+const WEDDING_TOKEN = (process.env.WEDDING_TOKEN || "").trim();
 
 /** Returns true if now >= EVENT_DATE (or no EVENT_DATE is set). */
 function isEventDay(): boolean {
@@ -22,7 +24,44 @@ function isEventDay(): boolean {
 // The page JS generates/retrieves a persistent deviceId from
 // localStorage, then POSTs it to /api/scan/verify.
 // ─────────────────────────────────────────────────────────────
-export function getScanPage(_req: Request, res: Response): void {
+export function getScanPage(req: Request, res: Response): void {
+  // Validate the token embedded in the QR code URL.
+  // If missing or wrong, this is not a genuine QR scan — reject it.
+  const token = ((req.query.token as string) || "").trim();
+  if (WEDDING_TOKEN && token !== WEDDING_TOKEN) {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.status(403).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Invalid QR</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;
+         background:url('/img_bg_aisha_francis.png') center/cover no-repeat fixed;
+         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:1.5rem;}
+    body::before{content:'';position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:0}
+    .card{position:relative;z-index:1;background:rgba(255,255,255,.12);
+          backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.2);
+          border-radius:1.5rem;padding:2.5rem 2rem;max-width:360px;
+          width:100%;text-align:center;color:#fff;}
+    .icon{font-size:3rem;margin-bottom:.75rem}
+    .title{font-size:1.6rem;font-weight:800;color:#f87171;margin-bottom:.5rem}
+    .msg{color:rgba(255,255,255,.8);line-height:1.5}
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">&#x274C;</div>
+  <div class="title">Invalid QR Code</div>
+  <div class="msg">Please scan the official wedding QR code to enter.</div>
+</div>
+</body>
+</html>`);
+    return;
+  }
+
   const footer =
     escHtml(WEDDING_NAME) +
     (WEDDING_DATE ? ` &middot; ${escHtml(WEDDING_DATE)}` : "");
@@ -132,23 +171,13 @@ export function getScanPage(_req: Request, res: Response): void {
   </div>
   <div class="footer">${footer}</div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 (function () {
-  var CAPACITY      = ${CAPACITY};
-  var EVENT_OPEN    = ${isEventDay()};
-  var EVENT_DATE_STR= '${escHtml(EVENT_DATE)}';
-  var GUARD_PIN     = '${escHtml(GUARD_PIN)}';
-  var SCAN_URL      = '${escHtml(BASE_URL)}/scan';
-  // Accept the QR if it exactly matches SCAN_URL, or if BASE_URL isn't
-  // configured yet, fall back to matching any URL that ends with '/scan'.
-  function isWeddingQR(data) {
-    if (SCAN_URL && SCAN_URL !== '/scan') return data === SCAN_URL;
-    return /\/scan$/.test(data);
-  }
-  var SESSION_KEY   = '1tqr_guard_auth';
-  var currentCount  = 0;
-  var scanningStream= null;
+  var CAPACITY       = ${CAPACITY};
+  var EVENT_OPEN     = ${isEventDay()};
+  var EVENT_DATE_STR = '${escHtml(EVENT_DATE)}';
+  var GUARD_PIN      = '${escHtml(GUARD_PIN)}';
+  var SESSION_KEY    = '1tqr_guard_auth';
 
   function genNonce() {
     return (window.crypto && window.crypto.randomUUID)
@@ -159,194 +188,130 @@ export function getScanPage(_req: Request, res: Response): void {
         });
   }
 
-  function showResult(status, title, msg) {
+  function showResult(status, title, msg, autoReset) {
     var icons  = {granted:'&#x2705;', denied:'&#x274C;', error:'&#x26A0;&#xFE0F;'};
     var colors = {granted:'#4ade80',  denied:'#f87171',  error:'#fbbf24'};
     document.getElementById('content').innerHTML =
       '<div class="icon">'+(icons[status]||'&#x26A0;&#xFE0F;')+'</div>'+
       '<div class="title" style="color:'+(colors[status]||'#fbbf24')+'">'+title+'</div>'+
       '<div class="msg">'+(msg||'')+'</div>';
-    if (EVENT_OPEN) setTimeout(startScanner, 2500);
+    if (autoReset) setTimeout(renderAdmit, 2500);
   }
 
-  function stopCamera() {
-    if (scanningStream) {
-      scanningStream.getTracks().forEach(function(t){ t.stop(); });
-      scanningStream = null;
-    }
-  }
-
-  function showAdmitButton() {
-    var nonce = genNonce();
-    var remaining = CAPACITY - currentCount;
-    document.getElementById('content').innerHTML =
-      '<div class="count-badge">'+currentCount+
-        '<span class="of"> / '+CAPACITY+'</span></div>'+
-      '<div class="count-label">admitted</div>'+
-      '<div style="color:#86efac;font-size:.9rem;margin-bottom:.75rem">&#x2705; QR Verified &mdash; ready to admit</div>'+
-      '<button id="admit-btn" class="admit-btn">TAP TO ADMIT</button>'+
-      '<div class="remaining">'+remaining+' spot'+(remaining!==1?'s':'')+' remaining</div>';
-
-    document.getElementById('admit-btn').addEventListener('click', function(){
-      var btn = this;
-      btn.disabled = true;
-      btn.textContent = 'Processing\u2026';
-      fetch('/api/scan/verify', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({scanNonce:nonce})
-      })
+  function renderAdmit() {
+    fetch('/api/admin/stats')
       .then(function(r){ return r.json(); })
       .then(function(data){
-        if (data.granted) {
-          currentCount = data.count;
-          showResult('granted','ADMITTED \u2705', data.count+' / '+CAPACITY+' guests entered');
-        } else if (data.reason==='full') {
-          showResult('denied','VENUE FULL','All '+CAPACITY+' spots have been filled');
-        } else {
-          showResult('error','Error', data.error||'Please try again');
+        var count=(data.data&&typeof data.data.totalAdmitted==='number')?data.data.totalAdmitted:0;
+        if (count>=CAPACITY){
+          showResult('denied','VENUE FULL','All '+CAPACITY+' spots have been filled', false);
+          return;
         }
+        var nonce = genNonce();
+        var remaining = CAPACITY - count;
+        document.getElementById('content').innerHTML =
+          '<div class="count-badge">'+count+
+            '<span class="of"> / '+CAPACITY+'</span></div>'+
+          '<div class="count-label">admitted</div>'+
+          '<button id="admit-btn" class="admit-btn">TAP TO ADMIT</button>'+
+          '<div class="remaining">'+remaining+' spot'+(remaining!==1?'s':'')+' remaining</div>';
+        document.getElementById('admit-btn').addEventListener('click', function(){
+          var btn=this; btn.disabled=true; btn.textContent='Processing\u2026';
+          fetch('/api/scan/verify',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({scanNonce:nonce})
+          })
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            if (d.granted){
+              showResult('granted','ADMITTED \u2705', d.count+' / '+CAPACITY+' guests entered', true);
+            } else if (d.reason==='full'){
+              showResult('denied','VENUE FULL','All '+CAPACITY+' spots have been filled', false);
+            } else {
+              showResult('error','Error', d.error||'Please try again', false);
+              setTimeout(renderAdmit, 2000);
+            }
+          })
+          .catch(function(){
+            showResult('error','Connection Error','Please try again or see a staff member.', false);
+            setTimeout(renderAdmit, 2000);
+          });
+        });
       })
       .catch(function(){
-        showResult('error','Connection Error','Please try again or see a staff member.');
+        showResult('error','Could Not Load','Check connection and try again.', false);
       });
-    });
   }
 
-  function startScanner() {
-    stopCamera();
-    var remaining = CAPACITY - currentCount;
-    document.getElementById('content').innerHTML =
-      '<div class="count-badge">'+currentCount+
-        '<span class="of"> / '+CAPACITY+'</span></div>'+
-      '<div class="count-label">admitted &bull; '+remaining+' remaining</div>'+
-      '<div class="scanner-hint">&#x1F4F7; Point at guest\'s QR code</div>'+
-      '<div class="scanner-wrap">'+
-        '<video id="qr-video" class="scanner-video" playsinline muted></video>'+
-        '<div class="scanner-overlay"><div class="scanner-frame" id="scan-frame"></div></div>'+
+  // ── Countdown (before event date) ──────────────────────────
+  if (!EVENT_OPEN) {
+    var targetDate = EVENT_DATE_STR ? new Date(EVENT_DATE_STR) : null;
+    function pad(n){ return String(n).padStart(2,'0'); }
+    function buildGrid(d,h,m,s){
+      return '<div class="countdown-grid">'+
+        '<div class="cd-cell"><div class="cd-digits">'+pad(d)+'</div><div class="cd-label">Days</div></div>'+
+        '<div class="cd-sep">:</div>'+
+        '<div class="cd-cell"><div class="cd-digits">'+pad(h)+'</div><div class="cd-label">Hrs</div></div>'+
+        '<div class="cd-sep">:</div>'+
+        '<div class="cd-cell"><div class="cd-digits">'+pad(m)+'</div><div class="cd-label">Min</div></div>'+
+        '<div class="cd-sep">:</div>'+
+        '<div class="cd-cell"><div class="cd-digits">'+pad(s)+'</div><div class="cd-label">Sec</div></div>'+
       '</div>';
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showAdmitButton(); return;
     }
-    navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}})
-      .then(function(stream){
-        scanningStream = stream;
-        var video = document.getElementById('qr-video');
-        if (!video) { stopCamera(); return; }
-        video.srcObject = stream;
-        video.play();
-        var canvas = document.createElement('canvas');
-        var ctx = canvas.getContext('2d');
-        var active = true;
-        function tick() {
-          if (!active || !scanningStream) return;
-          var v = document.getElementById('qr-video');
-          if (!v) { active=false; stopCamera(); return; }
-          if (v.readyState >= v.HAVE_ENOUGH_DATA) {
-            canvas.width=v.videoWidth; canvas.height=v.videoHeight;
-            ctx.drawImage(v,0,0);
-            try {
-              var img  = ctx.getImageData(0,0,canvas.width,canvas.height);
-              var code = jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
-              if (code && isWeddingQR(code.data)) {
-                active=false; stopCamera();
-                var frame=document.getElementById('scan-frame');
-                if (frame) frame.style.borderColor='#4ade80';
-                setTimeout(showAdmitButton, 300);
-                return;
-              }
-            } catch(e){}
-          }
-          requestAnimationFrame(tick);
-        }
-        requestAnimationFrame(tick);
-      })
-      .catch(function(){ showAdmitButton(); });
-  }
-
-  function renderReady(count) {
-    currentCount = count;
-
-    if (!EVENT_OPEN) {
-      var targetDate = EVENT_DATE_STR ? new Date(EVENT_DATE_STR) : null;
-      function pad(n){ return String(n).padStart(2,'0'); }
-      function buildGrid(d,h,m,s){
-        return '<div class="countdown-grid">'+
-          '<div class="cd-cell"><div class="cd-digits">'+pad(d)+'</div><div class="cd-label">Days</div></div>'+
-          '<div class="cd-sep">:</div>'+
-          '<div class="cd-cell"><div class="cd-digits">'+pad(h)+'</div><div class="cd-label">Hrs</div></div>'+
-          '<div class="cd-sep">:</div>'+
-          '<div class="cd-cell"><div class="cd-digits">'+pad(m)+'</div><div class="cd-label">Min</div></div>'+
-          '<div class="cd-sep">:</div>'+
-          '<div class="cd-cell"><div class="cd-digits">'+pad(s)+'</div><div class="cd-label">Sec</div></div>'+
-        '</div>';
-      }
-      function tick(){
-        var now=Date.now();
-        var diff=targetDate?Math.max(0,targetDate.getTime()-now):0;
-        if (diff<=0){location.reload();return;}
-        var td=Math.floor(diff/86400000);
-        var th=Math.floor((diff%86400000)/3600000);
-        var tm=Math.floor((diff%3600000)/60000);
-        var ts=Math.floor((diff%60000)/1000);
-        document.getElementById('content').innerHTML=
-          '<div style="color:#38bdf8;font-size:1rem;font-weight:700;letter-spacing:.08em;'+
-               'text-transform:uppercase;margin-bottom:.9rem">'+
-               '&#x1F48D; '+(document.title.replace(' \u2014 Entry',''))+'</div>'+
-          '<div class="countdown-wrap">'+
-            buildGrid(td,th,tm,ts)+
-            '<div class="cd-until">until the event</div>'+
-          '</div>'+
-          '<button class="admit-btn" disabled>NOT YET OPEN</button>';
-      }
-      tick(); setInterval(tick,1000); return;
-    }
-
-    if (GUARD_PIN && sessionStorage.getItem(SESSION_KEY)!=='1') {
+    function tick(){
+      var now=Date.now();
+      var diff=targetDate?Math.max(0,targetDate.getTime()-now):0;
+      if (diff<=0){location.reload();return;}
+      var td=Math.floor(diff/86400000);
+      var th=Math.floor((diff%86400000)/3600000);
+      var tm=Math.floor((diff%3600000)/60000);
+      var ts=Math.floor((diff%60000)/1000);
       document.getElementById('content').innerHTML=
-        '<div class="title" style="color:#fff;margin-bottom:.75rem">&#x1F512; Guard Access</div>'+
-        '<div class="msg" style="margin-bottom:1rem">Enter your PIN to continue</div>'+
-        '<div class="pin-wrap">'+
-          '<input id="pin-input" class="pin-input" type="password" inputmode="numeric" maxlength="10" placeholder="PIN" autocomplete="off" />'+
-          '<div id="pin-error" class="pin-error"></div>'+
+        '<div style="color:#38bdf8;font-size:1rem;font-weight:700;letter-spacing:.08em;'+
+             'text-transform:uppercase;margin-bottom:.9rem">'+
+             '&#x1F48D; '+(document.title.replace(' \u2014 Entry',''))+'</div>'+
+        '<div class="countdown-wrap">'+
+          buildGrid(td,th,tm,ts)+
+          '<div class="cd-until">until the event</div>'+
         '</div>'+
-        '<button id="pin-btn" class="admit-btn">UNLOCK</button>';
-      function attemptPin(){
-        var entered=document.getElementById('pin-input').value;
-        if (entered===GUARD_PIN){
-          sessionStorage.setItem(SESSION_KEY,'1');
-          startScanner();
-        } else {
-          document.getElementById('pin-error').textContent='Incorrect PIN. Try again.';
-          document.getElementById('pin-input').value='';
-          document.getElementById('pin-input').focus();
-        }
-      }
-      document.getElementById('pin-btn').addEventListener('click',attemptPin);
-      document.getElementById('pin-input').addEventListener('keydown',function(e){
-        if(e.key==='Enter')attemptPin();
-      });
-      document.getElementById('pin-input').focus();
-      return;
+        '<button class="admit-btn" disabled>NOT YET OPEN</button>';
     }
-
-    startScanner();
+    tick(); setInterval(tick,1000);
+    return;
   }
 
-  fetch('/api/admin/stats')
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      var count=(data.data&&typeof data.data.totalAdmitted==='number')?data.data.totalAdmitted:0;
-      if (count>=CAPACITY){
-        showResult('denied','VENUE FULL','All '+CAPACITY+' spots have been filled');
+  // ── PIN gate ────────────────────────────────────────────────
+  if (GUARD_PIN && sessionStorage.getItem(SESSION_KEY)!=='1') {
+    document.getElementById('content').innerHTML=
+      '<div class="title" style="color:#fff;margin-bottom:.75rem">&#x1F512; Guard Access</div>'+
+      '<div class="msg" style="margin-bottom:1rem">Enter your PIN to continue</div>'+
+      '<div class="pin-wrap">'+
+        '<input id="pin-input" class="pin-input" type="password" inputmode="numeric" maxlength="10" placeholder="PIN" autocomplete="off" />'+
+        '<div id="pin-error" class="pin-error"></div>'+
+      '</div>'+
+      '<button id="pin-btn" class="admit-btn">UNLOCK</button>';
+    function attemptPin(){
+      var entered=document.getElementById('pin-input').value;
+      if (entered===GUARD_PIN){
+        sessionStorage.setItem(SESSION_KEY,'1');
+        renderAdmit();
       } else {
-        renderReady(count);
+        document.getElementById('pin-error').textContent='Incorrect PIN. Try again.';
+        document.getElementById('pin-input').value='';
+        document.getElementById('pin-input').focus();
       }
-    })
-    .catch(function(){
-      showResult('error','Could Not Load','Unable to fetch entry status. Check connection and try again.');
+    }
+    document.getElementById('pin-btn').addEventListener('click',attemptPin);
+    document.getElementById('pin-input').addEventListener('keydown',function(e){
+      if(e.key==='Enter')attemptPin();
     });
+    document.getElementById('pin-input').focus();
+    return;
+  }
+
+  // ── Admit (PIN already verified or no PIN set) ──────────────
+  renderAdmit();
 })();
 </script>
 </body>

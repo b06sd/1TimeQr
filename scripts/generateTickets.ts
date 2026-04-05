@@ -13,7 +13,12 @@ import QRCode from "qrcode";
 
 async function main() {
   const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
-  const SCAN_URL = `${BASE_URL}/scan`;
+  const WEDDING_TOKEN = process.env.WEDDING_TOKEN || "";
+  if (!WEDDING_TOKEN) {
+    console.error("ERROR: WEDDING_TOKEN is not set in .env");
+    process.exit(1);
+  }
+  const SCAN_URL = `${BASE_URL}/scan?token=${WEDDING_TOKEN}`;
   const OUT_DIR = path.resolve("generated");
 
   // Ensure the output folder exists
