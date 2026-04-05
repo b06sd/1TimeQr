@@ -6,6 +6,9 @@ const WEDDING_DATE = (process.env.WEDDING_DATE || "").trim();
 const CAPACITY = parseInt(process.env.CAPACITY || "300", 10);
 // ISO date string e.g. "2026-04-20". Empty = no restriction.
 const EVENT_DATE = (process.env.EVENT_DATE || "").trim();
+// PIN the security guard must enter before the admit button is shown.
+const GUARD_PIN = (process.env.GUARD_PIN || "").trim();
+const BASE_URL  = (process.env.BASE_URL  || "").trim();
 
 /** Returns true if now >= EVENT_DATE (or no EVENT_DATE is set). */
 function isEventDay(): boolean {
@@ -36,19 +39,30 @@ export function getScanPage(_req: Request, res: Response): void {
     body{
       min-height:100vh;display:flex;align-items:center;justify-content:center;
       font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-      background:#f0f9ff;padding:1.5rem;transition:background .4s;
+      background:url('/img_bg_aisha_francis.png') center center/cover no-repeat fixed;
+      padding:1.5rem;transition:background .4s;
+    }
+    body::before{
+      content:'';position:fixed;inset:0;
+      background:rgba(0,0,0,0.45);
+      z-index:0;
     }
     .card{
-      background:#fff;border-radius:1.5rem;
-      box-shadow:0 4px 32px rgba(0,0,0,.1);
+      position:relative;z-index:1;
+      background:rgba(255,255,255,0.12);
+      backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+      border:1px solid rgba(255,255,255,0.25);
+      border-radius:1.5rem;
+      box-shadow:0 8px 40px rgba(0,0,0,.4);
       padding:2.5rem 2rem;max-width:400px;width:100%;text-align:center;
+      color:#fff;
     }
     .icon{font-size:3.5rem;margin-bottom:1rem}
-    .title{font-size:2rem;font-weight:800;margin-bottom:.5rem}
-    .msg{color:#4b5563;line-height:1.5;font-size:1.05rem}
-    .count-badge{font-size:4rem;font-weight:900;color:#0369a1;line-height:1}
-    .count-badge .of{font-size:2rem;font-weight:600;color:#93c5fd}
-    .count-label{color:#64748b;margin-bottom:1.5rem;font-size:.85rem;
+    .title{font-size:2rem;font-weight:800;margin-bottom:.5rem;color:#fff}
+    .msg{color:rgba(255,255,255,.85);line-height:1.5;font-size:1.05rem}
+    .count-badge{font-size:4rem;font-weight:900;color:#fff;line-height:1}
+    .count-badge .of{font-size:2rem;font-weight:600;color:rgba(255,255,255,.6)}
+    .count-label{color:rgba(255,255,255,.7);margin-bottom:1.5rem;font-size:.85rem;
                  text-transform:uppercase;letter-spacing:.08em}
     .admit-btn{
       display:block;width:100%;padding:1.25rem;
@@ -58,7 +72,30 @@ export function getScanPage(_req: Request, res: Response): void {
     }
     .admit-btn:hover:not(:disabled){background:#0284c7}
     .admit-btn:disabled{background:#94a3b8;cursor:not-allowed}
-    .remaining{color:#64748b;font-size:.85rem}
+    .remaining{color:rgba(255,255,255,.7);font-size:.85rem}
+    /* ── PIN gate ── */
+    .pin-wrap{margin-bottom:1.25rem}
+    .pin-input{
+      width:100%;padding:.75rem 1rem;font-size:1.5rem;letter-spacing:.3em;
+      text-align:center;border-radius:.75rem;
+      border:2px solid rgba(255,255,255,.3);
+      background:rgba(255,255,255,.15);color:#fff;
+      outline:none;margin-bottom:.6rem;
+    }
+    .pin-input::placeholder{letter-spacing:.05em;color:rgba(255,255,255,.4)}
+    .pin-input:focus{border-color:rgba(255,255,255,.7)}
+    .pin-error{color:#fca5a5;font-size:.85rem;min-height:1.1em}
+    /* ── QR Scanner ── */
+    .scanner-wrap{position:relative;border-radius:1rem;overflow:hidden;background:#000;margin-bottom:.75rem}
+    .scanner-video{width:100%;display:block;max-height:260px;object-fit:cover}
+    .scanner-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+    .scanner-frame{
+      width:55%;aspect-ratio:1;border-radius:.75rem;
+      border:3px solid rgba(56,189,248,.9);
+      box-shadow:0 0 0 9999px rgba(0,0,0,.35);
+      transition:border-color .3s;
+    }
+    .scanner-hint{color:rgba(255,255,255,.7);font-size:.82rem;margin-bottom:.6rem}
     /* ── Digital countdown ── */
     .countdown-wrap{margin:.5rem 0 1.25rem}
     .countdown-grid{display:flex;justify-content:center;gap:.5rem;margin-bottom:.4rem}
@@ -76,15 +113,15 @@ export function getScanPage(_req: Request, res: Response): void {
     .cd-sep{font-size:2.2rem;font-weight:900;color:#38bdf8;
             align-self:flex-start;margin-top:.15rem;line-height:1.2;
             text-shadow:0 0 8px rgba(56,189,248,.6)}
-    .cd-until{font-size:.8rem;color:#64748b;margin-top:.25rem}
+    .cd-until{font-size:.8rem;color:rgba(255,255,255,.6);margin-top:.25rem}
     .spinner{
-      width:48px;height:48px;border:4px solid #e5e7eb;
-      border-top-color:#6b7280;border-radius:50%;
+      width:48px;height:48px;border:4px solid rgba(255,255,255,.2);
+      border-top-color:rgba(255,255,255,.8);border-radius:50%;
       animation:spin .8s linear infinite;margin:0 auto 1.5rem;
     }
     @keyframes spin{to{transform:rotate(360deg)}}
-    .footer{margin-top:2rem;font-size:.75rem;color:#9ca3af;
-            border-top:1px solid #f3f4f6;padding-top:1rem}
+    .footer{margin-top:2rem;font-size:.75rem;color:rgba(255,255,255,.5);
+            border-top:1px solid rgba(255,255,255,.15);padding-top:1rem}
   </style>
 </head>
 <body>
@@ -95,142 +132,214 @@ export function getScanPage(_req: Request, res: Response): void {
   </div>
   <div class="footer">${footer}</div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 (function () {
-  var CAPACITY = ${CAPACITY};
-  var EVENT_OPEN = ${isEventDay()};
-  var EVENT_DATE_STR = '${escHtml(EVENT_DATE)}';
+  var CAPACITY      = ${CAPACITY};
+  var EVENT_OPEN    = ${isEventDay()};
+  var EVENT_DATE_STR= '${escHtml(EVENT_DATE)}';
+  var GUARD_PIN     = '${escHtml(GUARD_PIN)}';
+  var SCAN_URL      = '${escHtml(BASE_URL)}/scan';
+  var SESSION_KEY   = '1tqr_guard_auth';
+  var currentCount  = 0;
+  var scanningStream= null;
 
-  // One-time nonce generated fresh each page load — NOT stored in localStorage.
-  // Prevents double-admission if the security guard taps the button twice.
-  var nonce = (window.crypto && window.crypto.randomUUID)
-    ? window.crypto.randomUUID()
-    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        var r = (Math.random() * 16) | 0;
-        return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-      });
-
-  function render(status, title, msg) {
-    var palettes = {
-      granted: { bg: '#f0fdf4', accent: '#16a34a', icon: '&#x2705;' },
-      denied:  { bg: '#fef2f2', accent: '#dc2626', icon: '&#x274C;' },
-      error:   { bg: '#fff7ed', accent: '#d97706', icon: '&#x26A0;&#xFE0F;' }
-    };
-    var p = palettes[status] || palettes.error;
-    document.body.style.background = p.bg;
-    document.getElementById('content').innerHTML =
-      '<div class="icon">' + p.icon + '</div>' +
-      '<div class="title" style="color:' + p.accent + '">' + title + '</div>' +
-      '<div class="msg">' + (msg || '') + '</div>';
+  function genNonce() {
+    return (window.crypto && window.crypto.randomUUID)
+      ? window.crypto.randomUUID()
+      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
+          var r=(Math.random()*16)|0;
+          return(c==='x'?r:(r&0x3)|0x8).toString(16);
+        });
   }
 
-  function renderReady(count) {
-    var remaining = CAPACITY - count;
-    document.body.style.background = '#f0f9ff';
-
-    if (!EVENT_OPEN) {
-      // Build the digital countdown display
-      document.body.style.background = '#0f172a';
-      document.querySelector('.card').style.background = '#1e293b';
-      document.querySelector('.card').style.boxShadow = '0 4px 40px rgba(56,189,248,.15)';
-      document.querySelector('.footer').style.color = '#475569';
-      document.querySelector('.footer').style.borderTopColor = '#334155';
-
-      var targetDate = EVENT_DATE_STR ? new Date(EVENT_DATE_STR) : null;
-
-      function pad(n) { return String(n).padStart(2, '0'); }
-
-      function buildGrid(d, h, m, s) {
-        return '<div class="countdown-grid">' +
-          '<div class="cd-cell"><div class="cd-digits">' + pad(d) + '</div><div class="cd-label">Days</div></div>' +
-          '<div class="cd-sep">:</div>' +
-          '<div class="cd-cell"><div class="cd-digits">' + pad(h) + '</div><div class="cd-label">Hrs</div></div>' +
-          '<div class="cd-sep">:</div>' +
-          '<div class="cd-cell"><div class="cd-digits">' + pad(m) + '</div><div class="cd-label">Min</div></div>' +
-          '<div class="cd-sep">:</div>' +
-          '<div class="cd-cell"><div class="cd-digits">' + pad(s) + '</div><div class="cd-label">Sec</div></div>' +
-        '</div>';
-      }
-
-      function tick() {
-        var now  = Date.now();
-        var diff = targetDate ? Math.max(0, targetDate.getTime() - now) : 0;
-        var td   = Math.floor(diff / 86400000);
-        var th   = Math.floor((diff % 86400000) / 3600000);
-        var tm   = Math.floor((diff % 3600000)  / 60000);
-        var ts   = Math.floor((diff % 60000)    / 1000);
-        document.getElementById('content').innerHTML =
-          '<div style="color:#38bdf8;font-size:1rem;font-weight:700;letter-spacing:.08em;' +
-               'text-transform:uppercase;margin-bottom:.9rem">' +
-               '&#x1F48D; ' + (document.title.replace(' \u2014 Entry','')) + '</div>' +
-          '<div class="countdown-wrap">' +
-            buildGrid(td, th, tm, ts) +
-            '<div class="cd-until">until the event</div>' +
-          '</div>' +
-          '<button class="admit-btn" disabled>NOT YET OPEN</button>';
-      }
-
-      tick();
-      setInterval(tick, 1000);
-      return;
-    }
-
-    var remaining = CAPACITY - count;
-    document.body.style.background = '#f0f9ff';
+  function showResult(status, title, msg) {
+    var icons  = {granted:'&#x2705;', denied:'&#x274C;', error:'&#x26A0;&#xFE0F;'};
+    var colors = {granted:'#4ade80',  denied:'#f87171',  error:'#fbbf24'};
     document.getElementById('content').innerHTML =
-      '<div class="count-badge">' + count +
-        '<span class="of"> / ' + CAPACITY + '</span></div>' +
-      '<div class="count-label">admitted</div>' +
-      '<button id="admit-btn" class="admit-btn">TAP TO ADMIT</button>' +
-      '<div class="remaining">' + remaining + ' spot' + (remaining !== 1 ? 's' : '') + ' remaining</div>';
+      '<div class="icon">'+(icons[status]||'&#x26A0;&#xFE0F;')+'</div>'+
+      '<div class="title" style="color:'+(colors[status]||'#fbbf24')+'">'+title+'</div>'+
+      '<div class="msg">'+(msg||'')+'</div>';
+    if (EVENT_OPEN) setTimeout(startScanner, 2500);
+  }
 
-    document.getElementById('admit-btn').addEventListener('click', function () {
+  function stopCamera() {
+    if (scanningStream) {
+      scanningStream.getTracks().forEach(function(t){ t.stop(); });
+      scanningStream = null;
+    }
+  }
+
+  function showAdmitButton() {
+    var nonce = genNonce();
+    var remaining = CAPACITY - currentCount;
+    document.getElementById('content').innerHTML =
+      '<div class="count-badge">'+currentCount+
+        '<span class="of"> / '+CAPACITY+'</span></div>'+
+      '<div class="count-label">admitted</div>'+
+      '<div style="color:#86efac;font-size:.9rem;margin-bottom:.75rem">&#x2705; QR Verified &mdash; ready to admit</div>'+
+      '<button id="admit-btn" class="admit-btn">TAP TO ADMIT</button>'+
+      '<div class="remaining">'+remaining+' spot'+(remaining!==1?'s':'')+' remaining</div>';
+
+    document.getElementById('admit-btn').addEventListener('click', function(){
       var btn = this;
       btn.disabled = true;
       btn.textContent = 'Processing\u2026';
-
       fetch('/api/scan/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scanNonce: nonce })
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({scanNonce:nonce})
       })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
+      .then(function(r){ return r.json(); })
+      .then(function(data){
         if (data.granted) {
-          render('granted', 'ADMITTED \u2705',
-            data.count + ' / ' + CAPACITY + ' guests entered');
-        } else if (data.reason === 'full') {
-          render('denied', 'VENUE FULL',
-            'All ' + CAPACITY + ' spots have been filled');
+          currentCount = data.count;
+          showResult('granted','ADMITTED \u2705', data.count+' / '+CAPACITY+' guests entered');
+        } else if (data.reason==='full') {
+          showResult('denied','VENUE FULL','All '+CAPACITY+' spots have been filled');
         } else {
-          render('error', 'Error', data.error || 'Please try again');
-          btn.disabled = false;
-          btn.textContent = 'TAP TO ADMIT';
+          showResult('error','Error', data.error||'Please try again');
         }
       })
-      .catch(function () {
-        render('error', 'Connection Error', 'Please try again or see a staff member.');
-        btn.disabled = false;
-        btn.textContent = 'TAP TO ADMIT';
+      .catch(function(){
+        showResult('error','Connection Error','Please try again or see a staff member.');
       });
     });
   }
 
-  // Fetch current admission count then show the admit button
+  function startScanner() {
+    stopCamera();
+    var remaining = CAPACITY - currentCount;
+    document.getElementById('content').innerHTML =
+      '<div class="count-badge">'+currentCount+
+        '<span class="of"> / '+CAPACITY+'</span></div>'+
+      '<div class="count-label">admitted &bull; '+remaining+' remaining</div>'+
+      '<div class="scanner-hint">&#x1F4F7; Point at guest\'s QR code</div>'+
+      '<div class="scanner-wrap">'+
+        '<video id="qr-video" class="scanner-video" playsinline muted></video>'+
+        '<div class="scanner-overlay"><div class="scanner-frame" id="scan-frame"></div></div>'+
+      '</div>';
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showAdmitButton(); return;
+    }
+    navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}})
+      .then(function(stream){
+        scanningStream = stream;
+        var video = document.getElementById('qr-video');
+        if (!video) { stopCamera(); return; }
+        video.srcObject = stream;
+        video.play();
+        var canvas = document.createElement('canvas');
+        var ctx = canvas.getContext('2d');
+        var active = true;
+        function tick() {
+          if (!active || !scanningStream) return;
+          var v = document.getElementById('qr-video');
+          if (!v) { active=false; stopCamera(); return; }
+          if (v.readyState >= v.HAVE_ENOUGH_DATA) {
+            canvas.width=v.videoWidth; canvas.height=v.videoHeight;
+            ctx.drawImage(v,0,0);
+            try {
+              var img  = ctx.getImageData(0,0,canvas.width,canvas.height);
+              var code = jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
+              if (code && code.data===SCAN_URL) {
+                active=false; stopCamera();
+                var frame=document.getElementById('scan-frame');
+                if (frame) frame.style.borderColor='#4ade80';
+                setTimeout(showAdmitButton, 300);
+                return;
+              }
+            } catch(e){}
+          }
+          requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      })
+      .catch(function(){ showAdmitButton(); });
+  }
+
+  function renderReady(count) {
+    currentCount = count;
+
+    if (!EVENT_OPEN) {
+      var targetDate = EVENT_DATE_STR ? new Date(EVENT_DATE_STR) : null;
+      function pad(n){ return String(n).padStart(2,'0'); }
+      function buildGrid(d,h,m,s){
+        return '<div class="countdown-grid">'+
+          '<div class="cd-cell"><div class="cd-digits">'+pad(d)+'</div><div class="cd-label">Days</div></div>'+
+          '<div class="cd-sep">:</div>'+
+          '<div class="cd-cell"><div class="cd-digits">'+pad(h)+'</div><div class="cd-label">Hrs</div></div>'+
+          '<div class="cd-sep">:</div>'+
+          '<div class="cd-cell"><div class="cd-digits">'+pad(m)+'</div><div class="cd-label">Min</div></div>'+
+          '<div class="cd-sep">:</div>'+
+          '<div class="cd-cell"><div class="cd-digits">'+pad(s)+'</div><div class="cd-label">Sec</div></div>'+
+        '</div>';
+      }
+      function tick(){
+        var now=Date.now();
+        var diff=targetDate?Math.max(0,targetDate.getTime()-now):0;
+        if (diff<=0){location.reload();return;}
+        var td=Math.floor(diff/86400000);
+        var th=Math.floor((diff%86400000)/3600000);
+        var tm=Math.floor((diff%3600000)/60000);
+        var ts=Math.floor((diff%60000)/1000);
+        document.getElementById('content').innerHTML=
+          '<div style="color:#38bdf8;font-size:1rem;font-weight:700;letter-spacing:.08em;'+
+               'text-transform:uppercase;margin-bottom:.9rem">'+
+               '&#x1F48D; '+(document.title.replace(' \u2014 Entry',''))+'</div>'+
+          '<div class="countdown-wrap">'+
+            buildGrid(td,th,tm,ts)+
+            '<div class="cd-until">until the event</div>'+
+          '</div>'+
+          '<button class="admit-btn" disabled>NOT YET OPEN</button>';
+      }
+      tick(); setInterval(tick,1000); return;
+    }
+
+    if (GUARD_PIN && sessionStorage.getItem(SESSION_KEY)!=='1') {
+      document.getElementById('content').innerHTML=
+        '<div class="title" style="color:#fff;margin-bottom:.75rem">&#x1F512; Guard Access</div>'+
+        '<div class="msg" style="margin-bottom:1rem">Enter your PIN to continue</div>'+
+        '<div class="pin-wrap">'+
+          '<input id="pin-input" class="pin-input" type="password" inputmode="numeric" maxlength="10" placeholder="PIN" autocomplete="off" />'+
+          '<div id="pin-error" class="pin-error"></div>'+
+        '</div>'+
+        '<button id="pin-btn" class="admit-btn">UNLOCK</button>';
+      function attemptPin(){
+        var entered=document.getElementById('pin-input').value;
+        if (entered===GUARD_PIN){
+          sessionStorage.setItem(SESSION_KEY,'1');
+          startScanner();
+        } else {
+          document.getElementById('pin-error').textContent='Incorrect PIN. Try again.';
+          document.getElementById('pin-input').value='';
+          document.getElementById('pin-input').focus();
+        }
+      }
+      document.getElementById('pin-btn').addEventListener('click',attemptPin);
+      document.getElementById('pin-input').addEventListener('keydown',function(e){
+        if(e.key==='Enter')attemptPin();
+      });
+      document.getElementById('pin-input').focus();
+      return;
+    }
+
+    startScanner();
+  }
+
   fetch('/api/admin/stats')
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      var count = (data.data && typeof data.data.totalAdmitted === 'number')
-        ? data.data.totalAdmitted : 0;
-      if (count >= CAPACITY) {
-        render('denied', 'VENUE FULL', 'All ' + CAPACITY + ' spots have been filled');
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var count=(data.data&&typeof data.data.totalAdmitted==='number')?data.data.totalAdmitted:0;
+      if (count>=CAPACITY){
+        showResult('denied','VENUE FULL','All '+CAPACITY+' spots have been filled');
       } else {
         renderReady(count);
       }
     })
-    .catch(function () {
-      render('error', 'Could Not Load',
-        'Unable to fetch entry status. Check connection and try again.');
+    .catch(function(){
+      showResult('error','Could Not Load','Unable to fetch entry status. Check connection and try again.');
     });
 })();
 </script>
