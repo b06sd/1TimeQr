@@ -5,16 +5,14 @@ const WEDDING_NAME = (
   process.env.WEDDING_NAME || "Aisha & Francis Wedding"
 ).trim();
 const WEDDING_DATE = (process.env.WEDDING_DATE || "").trim();
-const CAPACITY = parseInt(process.env.CAPACITY || "300", 10);
+const CAPACITY = parseInt(process.env.CAPACITY || "", 10);
 // ISO date string e.g. "2026-04-20". Empty = no restriction.
-const EVENT_DATE = (process.env.EVENT_DATE || "2026-04-25T12:00:00Z").trim();
+const EVENT_DATE = (process.env.EVENT_DATE || "").trim();
 // PIN the security guard must enter before the admit button is shown.
 const GUARD_PIN = (process.env.GUARD_PIN || "").trim();
 const BASE_URL = (process.env.BASE_URL || "").trim();
 // Secret token embedded in the QR code URL — validates the QR is the real one.
-const WEDDING_TOKEN = (
-  process.env.WEDDING_TOKEN || "6fa0b18-724e-4f41-876a-35cd15ef05a2"
-).trim();
+const WEDDING_TOKEN = (process.env.WEDDING_TOKEN || "").trim();
 
 /** Returns true if now >= EVENT_DATE (or no EVENT_DATE is set). */
 function isEventDay(): boolean {
